@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Bakery Pausenbrot — POS</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{--rye:#5C3D1E;--rye2:#8B6240;--rye-pale:#EDE0D0;--green:#2D5A3D;--green2:#4A8260;--green-pale:#E8F2EC;--cream:#FAF7F2;--warm:#F2EDE4;--text:#1C1008;--text2:#5C4A35;--text3:#9C8A78;--border:rgba(92,61,30,0.13);--border2:rgba(92,61,30,0.25);--radius:10px;--radius-sm:6px;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--cream);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+.nav{display:flex;background:var(--rye);color:white;flex-shrink:0;}
+.nav-btn{flex:1;padding:12px 4px;border:none;background:none;color:rgba(255,255,255,0.65);font-size:11px;font-weight:500;cursor:pointer;letter-spacing:0.04em;text-transform:uppercase;border-bottom:2px solid transparent;}
+.nav-btn.active{color:white;border-bottom:2px solid white;}
+.sync-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle;background:#9C8A78;}
+.sync-dot.pending{background:#E2820A;}
+.sync-dot.ok{background:#4A8260;}
+.screen{display:none;flex:1;overflow:hidden;flex-direction:column;}
+.screen.active{display:flex;}
+.top-bar{background:white;border-bottom:1px solid var(--border);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px;}
+.total-block{flex-shrink:0;}
+.total-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;}
+.total-val{font-size:20px;font-weight:600;color:var(--rye);}
+.gst-val{font-size:10px;color:var(--text3);margin-top:1px;}
+.top-actions{display:flex;gap:6px;align-items:center;}
+.pay-toggle{display:flex;border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden;}
+.pay-btn{padding:6px 10px;font-size:12px;font-weight:500;border:none;background:white;cursor:pointer;color:var(--text2);}
+.pay-btn.active{background:var(--rye);color:white;}
+.btn{padding:7px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit;}
+.btn-ghost{background:none;border:1px solid var(--border2);color:var(--text2);}
+.btn-green{background:var(--green);color:white;}
+.btn-green:disabled{opacity:0.35;cursor:not-allowed;}
+.btn-hold{background:#E2820A;color:white;}
+.btn-hold:disabled{opacity:0.35;cursor:not-allowed;}
+.btn-recall{background:none;border:1px solid var(--border2);color:var(--text2);position:relative;}
+.held-badge{position:absolute;top:-6px;right:-6px;background:#E2820A;color:white;border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+.cat-scroll{overflow-x:auto;scrollbar-width:none;flex-shrink:0;background:var(--warm);border-bottom:1px solid var(--border);}
+.cat-scroll::-webkit-scrollbar{display:none;}
+.cat-tabs{display:flex;gap:4px;padding:6px 8px;white-space:nowrap;}
+.cat-tab{flex-shrink:0;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:white;color:var(--text2);}
+.cat-tab.active{background:var(--rye);color:white;border-color:var(--rye);}
+.pos-body{display:flex;flex:1;overflow:hidden;}
+.items-area{flex:1;overflow-y:auto;padding:8px;}
+.items-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.item-btn{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:8px 6px;cursor:pointer;text-align:left;position:relative;min-height:60px;display:flex;flex-direction:column;justify-content:space-between;}
+.item-btn:active{background:var(--warm);}
+.item-btn.has-qty{border-color:var(--green);border-width:1.5px;}
+.item-name{font-size:11px;font-weight:500;color:var(--text);line-height:1.3;}
+.item-price{font-size:11px;color:var(--text3);margin-top:3px;}
+.item-btn.has-qty .item-price{color:var(--green2);}
+.qty-badge{position:absolute;top:4px;right:4px;background:var(--green);color:white;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+.gst-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-left:3px;vertical-align:middle;}
+.gst5{background:#E2820A;}.gst0{background:#9C8A78;}
+.order-panel{width:200px;flex-shrink:0;border-left:1px solid var(--border);background:white;display:flex;flex-direction:column;overflow:hidden;}
+.order-header{padding:8px 10px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid var(--border);flex-shrink:0;}
+.order-lines{flex:1;overflow-y:auto;}
+.order-empty{padding:20px 10px;text-align:center;font-size:12px;color:var(--text3);}
+.ol{display:flex;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border);gap:4px;}
+.ol-name{flex:1;font-size:11px;color:var(--text);line-height:1.3;}
+.ol-qty-ctrl{display:flex;align-items:center;}
+.ol-qbtn{width:22px;height:22px;border:1px solid var(--border2);background:var(--cream);cursor:pointer;font-size:13px;color:var(--text2);display:flex;align-items:center;justify-content:center;line-height:1;}
+.ol-qbtn.m{border-radius:4px 0 0 4px;border-right:none;}
+.ol-qbtn.p{border-radius:0 4px 4px 0;border-left:none;}
+.ol-qty{width:22px;height:22px;border:1px solid var(--border2);border-left:none;border-right:none;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:white;}
+.ol-total{font-size:11px;font-weight:500;color:var(--text);min-width:34px;text-align:right;}
+.order-footer{border-top:1px solid var(--border);padding:8px 10px;flex-shrink:0;}
+.of-row{display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:3px;}
+.of-total{display:flex;justify-content:space-between;font-size:14px;font-weight:600;color:var(--rye);margin-top:6px;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;}
+.modal-bg.open{display:flex;}
+.modal{background:white;border-radius:var(--radius);padding:20px;width:270px;max-height:80vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:600;color:var(--rye);margin-bottom:4px;}
+.modal-amount{font-size:28px;font-weight:600;color:var(--green);margin:8px 0 4px;}
+.modal-sub{font-size:12px;color:var(--text3);margin-bottom:8px;}
+.modal-lines{font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.7;white-space:pre-wrap;}
+.modal-pay-row{display:flex;gap:8px;margin-bottom:14px;}
+.modal-pay-btn{flex:1;padding:8px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;cursor:pointer;border:1.5px solid var(--border2);background:white;color:var(--text2);}
+.modal-pay-btn.selected{border-color:var(--green);background:var(--green-pale);color:var(--green);}
+.modal-confirm{width:100%;padding:10px;background:var(--rye);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:500;cursor:pointer;}
+.analytics-body{flex:1;overflow-y:auto;padding:10px;}
+.ana-section{margin-bottom:16px;}
+.ana-title{font-size:13px;font-weight:600;color:var(--rye);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.stat-card{background:white;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;}
+.stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;}
+.stat-val{font-size:18px;font-weight:600;color:var(--rye);}
+.stat-sub{font-size:10px;color:var(--text3);margin-top:2px;}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.bar-label{font-size:11px;color:var(--text2);width:90px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bar-track{flex:1;background:var(--warm);border-radius:4px;height:14px;overflow:hidden;}
+.bar-fill{height:100%;background:var(--rye);border-radius:4px;}
+.bar-fill.green{background:var(--green);}
+.bar-val{font-size:11px;color:var(--text2);width:50px;text-align:right;flex-shrink:0;}
+.hour-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;}
+.hour-cell{background:white;border:1px solid var(--border);border-radius:4px;padding:4px 2px;text-align:center;}
+.hour-num{font-size:9px;color:var(--text3);}
+.hour-bar{height:28px;display:flex;align-items:flex-end;justify-content:center;margin:2px 0;}
+.hour-bar-inner{width:70%;border-radius:2px 2px 0 0;background:var(--rye);min-height:2px;}
+.hour-val{font-size:9px;color:var(--text2);}
+.ana-filter{display:flex;gap:6px;margin-bottom:10px;}
+.ana-filter-btn{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:white;color:var(--text2);}
+.ana-filter-btn.active{background:var(--rye);color:white;border-color:var(--rye);}
+.pay-split{display:flex;gap:6px;margin-bottom:12px;}
+.pay-pill{flex:1;background:white;border:1px solid var(--border);border-radius:var(--radius);padding:8px;text-align:center;}
+.pay-pill-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;}
+.pay-pill-val{font-size:16px;font-weight:600;color:var(--rye);margin-top:2px;}
+.pay-pill-sub{font-size:10px;color:var(--text3);}
+.tx-list{background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.tx-row{display:flex;align-items:center;padding:7px 10px;border-bottom:1px solid var(--border);gap:6px;}
+.tx-row:last-child{border-bottom:none;}
+.tx-time{font-size:10px;color:var(--text3);width:40px;flex-shrink:0;}
+.tx-items{flex:1;font-size:11px;color:var(--text2);line-height:1.4;}
+.tx-pay{font-size:10px;padding:2px 6px;border-radius:10px;flex-shrink:0;}
+.tx-pay.cash{background:#FEF3E2;color:#92400E;}
+.tx-pay.upi{background:#E6F1FB;color:#1E40AF;}
+.tx-amt{font-size:12px;font-weight:600;color:var(--text);width:48px;text-align:right;flex-shrink:0;}
+.tx-sync{font-size:9px;width:12px;flex-shrink:0;}
+.no-data{text-align:center;padding:20px;font-size:12px;color:var(--text3);}
+.sync-banner{background:#FFF8F0;border:1px solid rgba(226,130,10,0.3);border-radius:var(--radius-sm);padding:6px 10px;font-size:11px;color:#92400E;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+.sync-banner.hidden{display:none;}
+.sync-now-btn{background:var(--rye);color:white;border:none;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="nav-btn active" id="nav-pos" onclick="showScreen('pos',this)">Counter</button>
+  <button class="nav-btn" id="nav-ana" onclick="showScreen('ana',this)">Analytics</button>
+  <button class="nav-btn" id="nav-set" onclick="showScreen('set',this)">Settings</button>
+</div>
+
+<!-- POS -->
+<div class="screen active" id="screen-pos">
+  <div class="top-bar">
+    <div class="total-block">
+      <div class="total-label">Total<span class="sync-dot" id="sync-dot" title="Sync status"></span></div>
+      <div class="total-val" id="top-total">&#8377;0</div>
+      <div class="gst-val" id="top-gst">GST &#8377;0</div>
+    </div>
+    <div class="top-actions">
+      <div class="pay-toggle">
+        <button class="pay-btn active" id="pay-cash" onclick="setPayMode('cash')">Cash</button>
+        <button class="pay-btn" id="pay-upi" onclick="setPayMode('upi')">UPI</button>
+      </div>
+      <button class="btn btn-ghost" onclick="clearOrder()">Clear</button>
+      <button class="btn btn-hold" id="btn-hold" onclick="holdOrder()" disabled>Hold</button>
+      <button class="btn btn-recall" onclick="openRecall()">Recall</button>
+      <button class="btn btn-green" id="btn-charge" onclick="openCharge()" disabled>Charge</button>
+    </div>
+  </div>
+  <div class="cat-scroll"><div class="cat-tabs" id="cat-tabs"></div></div>
+  <div class="pos-body">
+    <div class="items-area"><div class="items-grid" id="items-grid"></div></div>
+    <div class="order-panel">
+      <div class="order-header">Order</div>
+      <div class="order-lines" id="order-lines"><div class="order-empty">Tap items to add</div></div>
+      <div class="order-footer">
+        <div class="of-row"><span>Excl. GST</span><span id="of-sub">&#8377;0</span></div>
+        <div class="of-row"><span>GST</span><span id="of-gst">&#8377;0</span></div>
+        <div class="of-total"><span>Total</span><span id="of-total">&#8377;0</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ANALYTICS -->
+<div class="screen" id="screen-ana">
+  <div class="analytics-body" id="analytics-body">
+    <div class="no-data">No sales yet.</div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="screen" id="screen-set">
+  <div class="analytics-body">
+    <div class="ana-title" style="margin-bottom:12px">Google Sheet sync</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;">Paste your Google Apps Script URL below. Sales sync automatically when wifi is available. Offline sales are queued and sent when connection returns.</p>
+    <input type="url" id="sheet-url-input" placeholder="https://script.google.com/macros/s/..." style="width:100%;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;font-size:13px;font-family:inherit;color:var(--text);background:white;margin-bottom:8px;">
+    <button onclick="saveSheetUrl()" style="background:var(--rye);color:white;border:none;border-radius:var(--radius-sm);padding:8px 20px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Save URL</button>
+    <div id="url-saved-msg" style="font-size:12px;color:var(--green);margin-top:6px;display:none;">Saved!</div>
+
+    <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+      <div class="ana-title" style="margin-bottom:8px">Sync status</div>
+      <div id="set-sync-status" style="font-size:12px;color:var(--text2);"></div>
+      <button onclick="syncNow()" style="margin-top:8px;background:var(--green);color:white;border:none;border-radius:var(--radius-sm);padding:8px 20px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Sync now</button>
+    </div>
+
+    <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+      <div class="ana-title" style="margin-bottom:8px;color:#A32D2D">Danger zone</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.6;">Clear all local sales data. Only do this after confirming everything is synced to Google Sheets.</p>
+      <button onclick="clearAllData()" style="background:#A32D2D;color:white;border:none;border-radius:var(--radius-sm);padding:8px 20px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;">Clear all local data</button>
+    </div>
+  </div>
+</div>
+
+<!-- HOLD NAME MODAL -->
+<div class="modal-bg" id="modal-hold">
+  <div class="modal">
+    <div class="modal-title" style="color:var(--rye)">Put order on hold</div>
+    <p style="font-size:13px;color:var(--text3);margin:8px 0 12px">Give this order a name so you can recall it later (e.g. "Table 2" or "Priya")</p>
+    <input type="text" id="hold-name-input" placeholder="Customer name or table..." style="width:100%;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:9px 12px;font-size:14px;font-family:inherit;color:var(--text);margin-bottom:14px;">
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmHold()" style="flex:1;padding:10px;background:#E2820A;color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;">Hold order</button>
+      <button onclick="document.getElementById('modal-hold').classList.remove('open')" style="flex:1;padding:10px;background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:14px;cursor:pointer;font-family:inherit;color:var(--text2);">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- RECALL MODAL -->
+<div class="modal-bg" id="modal-recall">
+  <div class="modal">
+    <div class="modal-title" style="color:var(--rye);margin-bottom:12px">Held orders</div>
+    <div id="held-orders-list"></div>
+    <button onclick="document.getElementById('modal-recall').classList.remove('open')" style="width:100%;margin-top:12px;padding:10px;background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:14px;cursor:pointer;font-family:inherit;color:var(--text2);">Close</button>
+  </div>
+</div>
+
+<!-- CHARGE MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <div class="modal-title">Charge customer</div>
+    <div class="modal-amount" id="modal-amount">&#8377;0</div>
+    <div class="modal-sub" id="modal-sub"></div>
+    <div class="modal-lines" id="modal-lines"></div>
+    <div class="modal-pay-row">
+      <button class="modal-pay-btn selected" id="mpay-cash" onclick="setModalPay('cash')">Cash</button>
+      <button class="modal-pay-btn" id="mpay-upi" onclick="setModalPay('upi')">UPI</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:0">
+      <button onclick="document.getElementById('modal').classList.remove('open')" style="flex:1;padding:10px;background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;font-family:inherit;color:var(--text2);">&#8592; Edit order</button>
+      <button class="modal-confirm" style="flex:2" onclick="confirmCharge()">Confirm &amp; new order</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var SHEET_URL = localStorage.getItem('pb_sheet_url') || '';
+var MENU = {
+  'Bread':[
+    {id:'ww_plain',name:'Sourdough WW',price:220,gst:0},
+    {id:'ww_seeds',name:'WW Seeds',price:280,gst:0},
+    {id:'multiflour',name:'Multiflour',price:250,gst:0},
+    {id:'ww_olives',name:'WW Olives',price:300,gst:0},
+    {id:'ww_oats',name:'WW Oats',price:330,gst:0},
+    {id:'baguette',name:'Baguette',price:120,gst:0},
+    {id:'ciabatta',name:'Ciabatta',price:170,gst:0},
+    {id:'pretzel',name:'Pretzel',price:100,gst:5},
+    {id:'focaccia',name:'Focaccia',price:200,gst:0},
+    {id:'sunday_bun',name:'Sunday Bun',price:70,gst:5},
+  ],
+  'Sandwiches':[
+    {id:'first_bencher',name:'First Bencher',price:300,gst:5},
+    {id:'last_bencher',name:'Last Bencher',price:300,gst:5},
+    {id:'teachers_darling',name:"Teacher's Darling",price:300,gst:5},
+    {id:'tiffin_teaser',name:'Tiffin Teaser',price:500,gst:5},
+    {id:'principals_delight',name:"Principal's Delight",price:400,gst:5},
+    {id:'nerds_fav',name:"Nerd's Favorite",price:350,gst:5},
+    {id:'cheater',name:'Cheater',price:350,gst:5},
+    {id:'school_bus',name:'School Bus',price:200,gst:5},
+    {id:'study_buddy',name:'Study Buddy',price:250,gst:5},
+    {id:'class_bunker',name:'Class Bunker',price:300,gst:5},
+    {id:'old_school',name:'Old School',price:300,gst:5},
+    {id:'extra_add',name:'Extra Egg/Cheese/Meat',price:50,gst:5},
+    {id:'weltmeister',name:'Weltmeister',price:450,gst:5},
+  ],
+  'Sweets':[
+    {id:'lime_tart',name:'Sweet Lime Tart',price:100,gst:5},
+    {id:'cin_roll',name:'Cinnamon Roll',price:100,gst:5},
+    {id:'wca_roll',name:'WC Almond Roll',price:120,gst:5},
+    {id:'dcb_roll',name:'DC Banana Roll',price:120,gst:5},
+    {id:'apple_cake',name:'Apple Crumble',price:200,gst:5},
+    {id:'mango_cc',name:'Mango Cheesecake',price:300,gst:5},
+    {id:'cheesecake',name:'Cheesecake',price:250,gst:5},
+  ],
+  'Hot Drinks':[
+    {id:'americano',name:'Americano',price:150,gst:5},
+    {id:'cappuccino',name:'Cappuccino',price:180,gst:5},
+    {id:'flat_white',name:'Flat White',price:180,gst:5},
+    {id:'latte',name:'Latte Macchiato',price:200,gst:5},
+    {id:'macchiato',name:'Macchiato',price:120,gst:5},
+    {id:'esp_sgl',name:'Espresso Sgl',price:80,gst:5},
+    {id:'esp_dbl',name:'Espresso Dbl',price:120,gst:5},
+    {id:'french_press',name:'French Press',price:180,gst:5},
+    {id:'tea',name:'Green/Black Tea',price:150,gst:5},
+    {id:'glh',name:'GLH',price:150,gst:5},
+    {id:'moringa',name:'Moringa Tea',price:150,gst:5},
+    {id:'choco_sm',name:'Chococino Small',price:50,gst:5},
+    {id:'choco_lg',name:'Chococino Large',price:100,gst:5},
+  ],
+  'Cold Drinks':[
+    {id:'lime_soda',name:'Fresh Lime Soda',price:100,gst:5},
+    {id:'ginger',name:'Ginger Cooler',price:180,gst:5},
+    {id:'hibiscus',name:'Hibiscus Lemonade',price:180,gst:5},
+    {id:'kombucha',name:'Kombucha',price:180,gst:5},
+    {id:'cold_coffee',name:'Cold Coffee',price:180,gst:5},
+    {id:'iced_americano',name:'Iced Americano',price:150,gst:5},
+  ],
+  'Chocolate':[
+    {id:'dark',name:'Dark Chocolate',price:300,gst:5},
+    {id:'dark_cin',name:'Dark & Cinnamon',price:300,gst:5},
+    {id:'dark_salt',name:'Dark & Sea Salt',price:300,gst:5},
+    {id:'dark_sour',name:'Dark & Sourdough',price:300,gst:5},
+    {id:'dark_esp',name:'Dark & Espresso',price:300,gst:5},
+    {id:'dark_straw',name:'Dark & Strawberry',price:350,gst:5},
+    {id:'dark_berry',name:'Dark & Mixed Berries',price:350,gst:5},
+    {id:'dark_berrynut',name:'Dark, Berries & Nuts',price:350,gst:5},
+    {id:'chips_choco',name:'Bread Chips & Choco',price:300,gst:5},
+  ],
+  'Cheese and Meat':[
+    {id:'aged_gouda',name:'Aged Gouda',price:450,gst:5},
+    {id:'smoked',name:'Smoked Gouda',price:350,gst:5},
+    {id:'cheddar o',name:'Orange Cheddar',price:350,gst:5},
+    {id:'cheddar',name:'Mild Cheddar',price:300,gst:5},
+    {id:'pepper',name:'Pepper Wheel',price:250,gst:5},
+    {id:'chilly',name:'Chilly Wheel',price:250,gst:5},
+    {id:'sausages',name:'Sausages',price:400,gst:5},
+    {id:'sausage',name:'Smoked Sausage',price:350,gst:5},
+    {id:'ham',name:'Ham',price:300,gst:5},
+    {id:'bacon',name:'Bacon Cubes',price:250,gst:5},
+  ],
+  'Preserves':[
+    {id:'apple_jam',name:'Apple & Cinnamon',price:350,gst:5},
+    {id:'mango_jam',name:'Mango Jam',price:350,gst:5},
+    {id:'pot_salad',name:'Potato Salad',price:300,gst:5},
+    {id:'sauerkraut',name:'Sauerkraut',price:300,gst:5},
+    {id:'mustard_cuc',name:'Mustard Cucumbers',price:250,gst:5},
+  ],
+  'Extras':[
+    {id:'bread_chips',name:'Bread Chips',price:150,gst:5},
+    {id:'pretzel_crack',name:'Pretzel Cracker',price:250,gst:5},
+    {id:'honey',name:'Honey',price:350,gst:5},
+    {id:'esp_powder',name:'Espresso Powder',price:550,gst:5},
+    {id:'fp_powder',name:'French Press Powder',price:520,gst:5},
+    {id:'andreas_book',name:"Andreas' Book",price:550,gst:5},
+    {id:'postcard',name:'Postcard',price:100,gst:5},
+    {id:'mosquito_sm',name:'Mosquito Repellent Small',price:150,gst:5},
+    {id:'mosquito_lg',name:'Mosquito Repellent Large',price:300,gst:5},
+  ],
+};
+
+var cats = Object.keys(MENU);
+var currentCat = cats[0];
+var order = {};
+var payMode = 'cash';
+var modalPayMode = 'cash';
+var sales = JSON.parse(localStorage.getItem('pb_sales') || '[]');
+var syncQueue = JSON.parse(localStorage.getItem('pb_sync_queue') || '[]');
+var anaFilter = 'today';
+
+function getItem(id) {
+  for (var c in MENU) {
+    for (var i = 0; i < MENU[c].length; i++) {
+      if (MENU[c][i].id === id) return MENU[c][i];
+    }
+  }
+  return null;
+}
+
+function calcOrder() {
+  var sub = 0, gst = 0;
+  Object.keys(order).forEach(function(id) {
+    var item = getItem(id); if (!item || !order[id]) return;
+    var lineBase = item.price * order[id];
+    var gstAmt = item.gst > 0 ? Math.round(lineBase - lineBase / (1 + item.gst / 100)) : 0;
+    gst += gstAmt;
+    sub += lineBase - gstAmt;
+  });
+  return {sub:sub, gst:gst, total:sub+gst};
+}
+
+function updateSyncDot() {
+  var dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot' + (syncQueue.length > 0 ? ' pending' : ' ok');
+  dot.title = syncQueue.length > 0 ? syncQueue.length+' sale(s) pending sync' : 'All synced';
+}
+
+function setPayMode(m) {
+  payMode = m;
+  document.getElementById('pay-cash').className = 'pay-btn'+(m==='cash'?' active':'');
+  document.getElementById('pay-upi').className = 'pay-btn'+(m==='upi'?' active':'');
+  setModalPay(m);
+}
+
+function setModalPay(m) {
+  modalPayMode = m;
+  document.getElementById('mpay-cash').className = 'modal-pay-btn'+(m==='cash'?' selected':'');
+  document.getElementById('mpay-upi').className = 'modal-pay-btn'+(m==='upi'?' selected':'');
+}
+
+function renderTabs() {
+  var html = '';
+  cats.forEach(function(c) {
+    html += '<button class="cat-tab'+(c===currentCat?' active':'')+'" onclick="switchCat(\''+c+'\')">'+c+'</button>';
+  });
+  document.getElementById('cat-tabs').innerHTML = html;
+}
+
+function renderGrid() {
+  var items = MENU[currentCat]; var html = '';
+  items.forEach(function(item) {
+    var q = order[item.id]||0;
+    var dot = '<span class="gst-dot '+(item.gst===5?'gst5':'gst0')+'"></span>';
+    html += '<button class="item-btn'+(q>0?' has-qty':'')+'" onclick="addItem(\''+item.id+'\')">'+
+      (q>0?'<div class="qty-badge">'+q+'</div>':'')+
+      '<div class="item-name">'+item.name+dot+'</div>'+
+      '<div class="item-price">&#8377;'+item.price+(item.gst===0?' <span style="font-size:9px">0%</span>':'')+'</div>'+
+      '</button>';
+  });
+  document.getElementById('items-grid').innerHTML = html;
+}
+
+function renderOrder() {
+  var keys = Object.keys(order).filter(function(k){return order[k]>0;});
+  var calc = calcOrder();
+  document.getElementById('top-total').textContent = '\u20b9'+calc.total;
+  document.getElementById('top-gst').textContent = 'GST (incl.) \u20b9'+calc.gst;
+  document.getElementById('of-sub').textContent = '\u20b9'+calc.sub;
+  document.getElementById('of-gst').textContent = '\u20b9'+calc.gst;
+  document.getElementById('of-total').textContent = '\u20b9'+calc.total;
+  document.getElementById('btn-charge').disabled = calc.total === 0;
+  var holdBtn = document.getElementById('btn-hold');
+  if (holdBtn) holdBtn.disabled = calc.total === 0;
+  if (keys.length === 0) { document.getElementById('order-lines').innerHTML = '<div class="order-empty">Tap items to add</div>'; return; }
+  var html = '';
+  keys.forEach(function(id) {
+    var item = getItem(id); if (!item) return;
+    var q = order[id];
+    html += '<div class="ol"><span class="ol-name">'+item.name+'</span>'+
+      '<div class="ol-qty-ctrl">'+
+        '<button class="ol-qbtn m" onclick="changeQty(\''+id+'\',-1)">&#8722;</button>'+
+        '<div class="ol-qty">'+q+'</div>'+
+        '<button class="ol-qbtn p" onclick="changeQty(\''+id+'\',1)">+</button>'+
+      '</div>'+
+      '<span class="ol-total">&#8377;'+(item.price*q)+'</span></div>';
+  });
+  document.getElementById('order-lines').innerHTML = html;
+}
+
+function switchCat(c) { currentCat=c; renderTabs(); renderGrid(); }
+function addItem(id) { order[id]=(order[id]||0)+1; renderGrid(); renderOrder(); }
+function changeQty(id, dir) {
+  var n=(order[id]||0)+dir;
+  if (n<=0){delete order[id];}else{order[id]=n;}
+  renderGrid(); renderOrder();
+}
+function clearOrder() { order={}; renderGrid(); renderOrder(); }
+
+function openCharge() {
+  var calc = calcOrder();
+  document.getElementById('modal-amount').textContent = '\u20b9'+calc.total;
+  document.getElementById('modal-sub').textContent = 'Subtotal \u20b9'+calc.sub+' + GST \u20b9'+calc.gst;
+  var keys = Object.keys(order).filter(function(k){return order[k]>0;});
+  document.getElementById('modal-lines').textContent = keys.map(function(id){
+    var item=getItem(id); return item?order[id]+' x '+item.name:'';
+  }).filter(Boolean).join('\n');
+  setModalPay(payMode);
+  document.getElementById('modal').classList.add('open');
+}
+
+function confirmCharge() {
+  var calc = calcOrder();
+  var keys = Object.keys(order).filter(function(k){return order[k]>0;});
+  var items = keys.map(function(id){
+    var item=getItem(id);
+    return item?{id:id,name:item.name,qty:order[id],price:item.price,gst:item.gst}:null;
+  }).filter(Boolean);
+  var now = new Date();
+  var sale = {
+    time: now.toISOString(),
+    hour: now.getHours(),
+    items: items,
+    sub: calc.sub,
+    gst: calc.gst,
+    total: calc.total,
+    pay: modalPayMode,
+    synced: false
+  };
+  sales.push(sale);
+  localStorage.setItem('pb_sales', JSON.stringify(sales));
+  var syncPayload = {
+    type: 'pos_sale',
+    time: sale.time,
+    items: items.map(function(it){return it.qty+'x '+it.name+' @\u20b9'+it.price;}).join(', '),
+    sub: calc.sub,
+    gst: calc.gst,
+    total: calc.total,
+    pay: modalPayMode
+  };
+  syncQueue.push(syncPayload);
+  localStorage.setItem('pb_sync_queue', JSON.stringify(syncQueue));
+  updateSyncDot();
+  document.getElementById('modal').classList.remove('open');
+  clearOrder();
+  trySyncQueue();
+}
+
+function trySyncQueue() {
+  if (!SHEET_URL || syncQueue.length === 0) return;
+  var item = syncQueue[0];
+  fetch(SHEET_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(item)
+  }).then(function() {
+    syncQueue.shift();
+    localStorage.setItem('pb_sync_queue', JSON.stringify(syncQueue));
+    updateSyncDot();
+    if (syncQueue.length > 0) setTimeout(trySyncQueue, 500);
+  }).catch(function() {
+    syncQueue.shift();
+    localStorage.setItem('pb_sync_queue', JSON.stringify(syncQueue));
+    updateSyncDot();
+  });
+}
+
+function syncNow() {
+  SHEET_URL = localStorage.getItem('pb_sheet_url') || '';
+  if (!SHEET_URL) { alert('Please save your Sheet URL in Settings first.'); return; }
+  if (syncQueue.length === 0) { document.getElementById('set-sync-status').textContent = 'Nothing to sync — all up to date.'; return; }
+  document.getElementById('set-sync-status').textContent = 'Syncing '+syncQueue.length+' sale(s)...';
+  trySyncQueue();
+  setTimeout(function(){
+    document.getElementById('set-sync-status').textContent = syncQueue.length === 0 ? 'All synced!' : syncQueue.length+' sale(s) still pending (check wifi).';
+  }, 3000);
+}
+
+function saveSheetUrl() {
+  var url = document.getElementById('sheet-url-input').value.trim();
+  if (!url) return;
+  SHEET_URL = url;
+  localStorage.setItem('pb_sheet_url', url);
+  var msg = document.getElementById('url-saved-msg');
+  msg.style.display = 'block';
+  setTimeout(function(){msg.style.display='none';},2000);
+  trySyncQueue();
+}
+
+function clearAllData() {
+  if (!confirm('Delete all local sales data? Make sure it is synced first.')) return;
+  sales = []; syncQueue = [];
+  localStorage.setItem('pb_sales','[]');
+  localStorage.setItem('pb_sync_queue','[]');
+  updateSyncDot();
+  document.getElementById('set-sync-status').textContent = 'All local data cleared.';
+}
+
+function showScreen(s, btn) {
+  document.querySelectorAll('.screen').forEach(function(el){el.classList.remove('active');});
+  document.querySelectorAll('.nav-btn').forEach(function(el){el.classList.remove('active');});
+  document.getElementById('screen-'+s).classList.add('active');
+  btn.classList.add('active');
+  if (s==='ana') renderAnalytics();
+  if (s==='set') {
+    var inp = document.getElementById('sheet-url-input');
+    inp.value = localStorage.getItem('pb_sheet_url')||'';
+    var q = JSON.parse(localStorage.getItem('pb_sync_queue')||'[]');
+    document.getElementById('set-sync-status').textContent = q.length===0 ? 'All sales synced.' : q.length+' sale(s) pending sync.';
+  }
+}
+
+function filteredSales() {
+  var now = new Date(); var today = now.toDateString();
+  var thisMonth = now.getFullYear()+'-'+(now.getMonth()+1);
+  return sales.filter(function(s){
+    var d = new Date(s.time);
+    if (anaFilter==='today') return d.toDateString()===today;
+    if (anaFilter==='month') return (d.getFullYear()+'-'+(d.getMonth()+1))===thisMonth;
+    return true;
+  });
+}
+
+function renderAnalytics() {
+  var fs = filteredSales(); var body = document.getElementById('analytics-body');
+  if (sales.length===0){body.innerHTML='<div class="no-data">No sales recorded yet.<br>Complete an order on the counter to see analytics.</div>';return;}
+  var totalRev=fs.reduce(function(a,s){return a+s.total;},0);
+  var totalGST=fs.reduce(function(a,s){return a+s.gst;},0);
+  var totalTx=fs.length;
+  var cashRev=fs.filter(function(s){return s.pay==='cash';}).reduce(function(a,s){return a+s.total;},0);
+  var upiRev=fs.filter(function(s){return s.pay==='upi';}).reduce(function(a,s){return a+s.total;},0);
+  var cashTx=fs.filter(function(s){return s.pay==='cash';}).length;
+  var upiTx=fs.filter(function(s){return s.pay==='upi';}).length;
+  var avgTx=totalTx>0?Math.round(totalRev/totalTx):0;
+  var itemMap={};
+  fs.forEach(function(s){s.items.forEach(function(it){itemMap[it.name]=(itemMap[it.name]||0)+it.qty;});});
+  var itemArr=Object.keys(itemMap).map(function(n){return{name:n,qty:itemMap[n]};}).sort(function(a,b){return b.qty-a.qty;});
+  var hourMap={};
+  fs.forEach(function(s){hourMap[s.hour]=(hourMap[s.hour]||0)+s.total;});
+  var maxHour=Math.max.apply(null,Object.values(hourMap).concat([1]));
+  var recent=fs.slice().reverse().slice(0,15);
+  var hourHtml='';
+  for(var h=7;h<=21;h++){
+    var v=hourMap[h]||0; var barH=Math.round((v/maxHour)*26);
+    var lbl=h>12?(h-12)+'p':(h===12?'12p':h+'a');
+    hourHtml+='<div class="hour-cell"><div class="hour-num">'+lbl+'</div><div class="hour-bar"><div class="hour-bar-inner" style="height:'+Math.max(barH,2)+'px"></div></div><div class="hour-val">'+(v>0?'\u20b9'+(v>=1000?Math.round(v/100)/10+'k':v):'')+'</div></div>';
+  }
+  var maxQty=itemArr.length>0?itemArr[0].qty:1;
+  var topItems=itemArr.slice(0,10).map(function(it){
+    var pct=Math.round((it.qty/maxQty)*100);
+    return '<div class="bar-row"><span class="bar-label">'+it.name+'</span><div class="bar-track"><div class="bar-fill green" style="width:'+pct+'%"></div></div><span class="bar-val">'+it.qty+'x</span></div>';
+  }).join('');
+  var txHtml=recent.length===0?'<div class="no-data">No transactions</div>':
+    '<div class="tx-list">'+recent.map(function(s){
+      var t=new Date(s.time);
+      var hm=t.getHours()+':'+(t.getMinutes()<10?'0':'')+t.getMinutes();
+      var names=s.items.map(function(it){return it.qty>1?it.qty+'x '+it.name:it.name;}).join(', ');
+      return '<div class="tx-row"><span class="tx-time">'+hm+'</span><span class="tx-items">'+names+'</span><span class="tx-pay '+s.pay+'">'+s.pay.toUpperCase()+'</span><span class="tx-amt">\u20b9'+s.total+'</span></div>';
+    }).join('')+'</div>';
+
+  body.innerHTML=
+    '<div class="ana-filter">'+
+      '<button class="ana-filter-btn'+(anaFilter==='today'?' active':'')+'" onclick="setAnaFilter(\'today\')">Today</button>'+
+      '<button class="ana-filter-btn'+(anaFilter==='month'?' active':'')+'" onclick="setAnaFilter(\'month\')">This month</button>'+
+      '<button class="ana-filter-btn'+(anaFilter==='all'?' active':'')+'" onclick="setAnaFilter(\'all\')">All time</button>'+
+    '</div>'+
+    '<div class="stat-grid">'+
+      '<div class="stat-card"><div class="stat-label">Revenue (incl. GST)</div><div class="stat-val">\u20b9'+totalRev+'</div><div class="stat-sub">excl. GST \u20b9'+(totalRev-totalGST)+'</div></div>'+
+      '<div class="stat-card"><div class="stat-label">GST collected</div><div class="stat-val">\u20b9'+totalGST+'</div><div class="stat-sub">'+totalTx+' transactions</div></div>'+
+      '<div class="stat-card"><div class="stat-label">Avg order</div><div class="stat-val">\u20b9'+avgTx+'</div><div class="stat-sub">per transaction</div></div>'+
+      '<div class="stat-card"><div class="stat-label">Items sold</div><div class="stat-val">'+fs.reduce(function(a,s){return a+s.items.reduce(function(b,it){return b+it.qty;},0);},0)+'</div><div class="stat-sub">'+totalTx+' orders</div></div>'+
+    '</div>'+
+    '<div class="pay-split">'+
+      '<div class="pay-pill"><div class="pay-pill-label">Cash</div><div class="pay-pill-val">\u20b9'+cashRev+'</div><div class="pay-pill-sub">'+cashTx+' orders</div></div>'+
+      '<div class="pay-pill"><div class="pay-pill-label">UPI</div><div class="pay-pill-val">\u20b9'+upiRev+'</div><div class="pay-pill-sub">'+upiTx+' orders</div></div>'+
+    '</div>'+
+    '<div class="ana-section"><div class="ana-title">Sales by hour</div><div class="hour-grid">'+hourHtml+'</div></div>'+
+    '<div class="ana-section"><div class="ana-title">Top selling items</div>'+(topItems||'<div class="no-data">No data</div>')+'</div>'+
+    '<div class="ana-section"><div class="ana-title">Recent transactions</div>'+txHtml+'</div>'+
+    (anaFilter==='all' ? buildMonthlyBreakdown() : '');
+}
+
+
+/* ── HOLD / RECALL ── */
+var heldOrders = JSON.parse(localStorage.getItem('pb_held') || '[]');
+
+function holdOrder() {
+  if (Object.keys(order).filter(function(k){return order[k]>0;}).length === 0) return;
+  document.getElementById('hold-name-input').value = '';
+  document.getElementById('modal-hold').classList.add('open');
+  setTimeout(function(){ document.getElementById('hold-name-input').focus(); }, 100);
+}
+
+function confirmHold() {
+  var name = document.getElementById('hold-name-input').value.trim() || 'Order ' + (heldOrders.length + 1);
+  var snapshot = {};
+  Object.keys(order).forEach(function(k){ if(order[k]>0) snapshot[k] = order[k]; });
+  heldOrders.push({ name: name, items: snapshot, pay: payMode, time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) });
+  localStorage.setItem('pb_held', JSON.stringify(heldOrders));
+  document.getElementById('modal-hold').classList.remove('open');
+  clearOrder();
+  updateHeldBadge();
+}
+
+function openRecall() {
+  var list = document.getElementById('held-orders-list');
+  if (heldOrders.length === 0) {
+    list.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--text3);padding:1rem">No held orders</div>';
+  } else {
+    list.innerHTML = heldOrders.map(function(h, i) {
+      var keys = Object.keys(h.items);
+      var preview = keys.slice(0,3).map(function(k){
+        var item = getItem(k);
+        return item ? h.items[k]+'x '+item.name : '';
+      }).filter(Boolean).join(', ');
+      if (keys.length > 3) preview += ' +' + (keys.length-3) + ' more';
+      var calc = calcHeld(h.items);
+      return '<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+          '<span style="font-size:14px;font-weight:500">'+h.name+'</span>'+
+          '<span style="font-size:12px;color:var(--text3)">'+h.time+'</span>'+
+        '</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">'+preview+'</div>'+
+        '<div style="display:flex;gap:6px">'+
+          '<button onclick="recallOrder('+i+')" style="flex:2;padding:7px;background:var(--green);color:white;border:none;border-radius:4px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;">Recall ₹'+calc.total+'</button>'+
+          '<button onclick="deleteHeld('+i+')" style="flex:1;padding:7px;background:none;border:1px solid var(--border2);border-radius:4px;font-size:12px;cursor:pointer;font-family:inherit;color:#A32D2D;">Delete</button>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+  document.getElementById('modal-recall').classList.add('open');
+}
+
+function calcHeld(items) {
+  var sub = 0, gst = 0;
+  Object.keys(items).forEach(function(id) {
+    var item = getItem(id);
+    if (!item || !items[id]) return;
+    var lineBase = item.price * items[id];
+    var gstAmt = item.gst > 0 ? Math.round(lineBase - lineBase / (1 + item.gst / 100)) : 0;
+    gst += gstAmt;
+    sub += lineBase - gstAmt;
+  });
+  return {sub:sub, gst:gst, total:sub+gst};
+}
+
+function recallOrder(i) {
+  var held = heldOrders[i];
+  if (Object.keys(order).filter(function(k){return order[k]>0;}).length > 0) {
+    if (!confirm('Replace current order with "' + held.name + '"?')) return;
+  }
+  order = {};
+  Object.keys(held.items).forEach(function(k){ order[k] = held.items[k]; });
+  setPayMode(held.pay || 'cash');
+  heldOrders.splice(i, 1);
+  localStorage.setItem('pb_held', JSON.stringify(heldOrders));
+  document.getElementById('modal-recall').classList.remove('open');
+  renderGrid();
+  renderOrder();
+  updateHeldBadge();
+}
+
+function deleteHeld(i) {
+  heldOrders.splice(i, 1);
+  localStorage.setItem('pb_held', JSON.stringify(heldOrders));
+  openRecall();
+  updateHeldBadge();
+}
+
+function updateHeldBadge() {
+  var holdBtn = document.getElementById('btn-hold');
+  if (holdBtn) holdBtn.disabled = Object.keys(order).filter(function(k){return order[k]>0;}).length === 0;
+  var recallBtn = document.querySelector('.btn-recall');
+  if (!recallBtn) return;
+  var existing = recallBtn.querySelector('.held-badge');
+  if (existing) existing.remove();
+  if (heldOrders.length > 0) {
+    var badge = document.createElement('div');
+    badge.className = 'held-badge';
+    badge.textContent = heldOrders.length;
+    recallBtn.appendChild(badge);
+  }
+}
+
+function setAnaFilter(f){anaFilter=f;renderAnalytics();}
+
+function buildMonthlyBreakdown() {
+  if (sales.length === 0) return '';
+  // group sales by month
+  var monthMap = {};
+  var monthOrder = [];
+  sales.forEach(function(s) {
+    var d = new Date(s.time);
+    var key = d.getFullYear() + '-' + (d.getMonth()+1);
+    var label = getMonthName(d);
+    if (!monthMap[key]) { monthMap[key] = {label:label, total:0, gst:0, cash:0, upi:0, tx:0}; monthOrder.push(key); }
+    monthMap[key].total += s.total;
+    monthMap[key].gst += s.gst;
+    monthMap[key].tx += 1;
+    if (s.pay==='cash') monthMap[key].cash += s.total;
+    else monthMap[key].upi += s.total;
+  });
+
+  var maxMonthTotal = Math.max.apply(null, monthOrder.map(function(k){return monthMap[k].total;}));
+
+  var rows = monthOrder.slice().reverse().map(function(key) {
+    var m = monthMap[key];
+    var pct = Math.round((m.total / maxMonthTotal) * 100);
+    return '<div class="bar-row">'+
+      '<span class="bar-label">'+m.label+'</span>'+
+      '<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%"></div></div>'+
+      '<span class="bar-val">₹'+m.total+'</span>'+
+    '</div>'+
+    '<div style="font-size:10px;color:var(--text3);margin:-3px 0 6px 90px">'+m.tx+' orders &middot; GST ₹'+m.gst+' &middot; Cash ₹'+m.cash+' / UPI ₹'+m.upi+'</div>';
+  }).join('');
+
+  return '<div class="ana-section"><div class="ana-title">Monthly breakdown</div>'+rows+'</div>';
+}
+
+function getMonthName(d) {
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getMonth()] + ' ' + d.getFullYear();
+}
+
+if (document.getElementById('sheet-url-input')) {
+  document.getElementById('sheet-url-input').value = SHEET_URL;
+}
+window.addEventListener('online', function(){ trySyncQueue(); });
+renderTabs(); renderGrid(); renderOrder(); updateSyncDot(); updateHeldBadge();
+setTimeout(trySyncQueue, 2000);
+</script>
+</body>
+</html>
